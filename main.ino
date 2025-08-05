@@ -2,7 +2,7 @@
 #include "FS.h"
 #include "SD_MMC.h"
 #include <WiFi.h>
-#include <HTTPClient.h>
+
 #include "time.h"
 
 #define PIR_PIN          13      // adjust if your PIR is on a different GPIO
@@ -139,15 +139,7 @@ void loop() {
 
     esp_camera_fb_return(fb);
 
-    // Send GET request with timestamp
-    if (WiFi.status() == WL_CONNECTED) {
-      String url = String("http://your-endpoint.example/api?timestamp=") + (ts + 1);
-      HTTPClient http;
-      http.begin(url);
-      int httpCode = http.GET();
-      Serial.printf("HTTP request result: %d\n", httpCode);
-      http.end();
-    }
+ 
 
     // wait 10 seconds before next possible capture
     delay(10000);
