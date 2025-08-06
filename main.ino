@@ -2,11 +2,10 @@
 #include "FS.h"
 #include "SD_MMC.h"
 #include <WiFi.h>
-
 #include "time.h"
 
-#define PIR_PIN          13      // adjust if your PIR is on a different GPIO
-#define PIR_DETECTED     HIGH
+#define RADAR_PIN          13      // adjust if your radar sensor's OUT pin is on a different GPIO
+#define RADAR_DETECTED     HIGH
 #define CAMERA_MODEL_LILYGO_TCAMERA_S3
 #include "camera_pins.h"         // defines pin numbers for this board
 
@@ -44,24 +43,24 @@ void setup() {
     return;
   }
 
-  // Read Wi‑Fi credentials from SD card
+  // Read Wi-Fi credentials from SD card
   readCredentials(wifiSsid, wifiPass);
 
-  // Connect to Wi‑Fi
+  // Connect to Wi-Fi
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
-  Serial.println("Connecting to Wi‑Fi…");
+  Serial.println("Connecting to Wi-Fi…");
   unsigned long startAttempt = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 15000) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? "\nWi‑Fi connected" : "\nWi‑Fi failed");
+  Serial.println(WiFi.status() == WL_CONNECTED ? "\nWi-Fi connected" : "\nWi-Fi failed");
 
   // Configure time for timestamp filenames
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-  // Configure PIR pin
-  pinMode(PIR_PIN, INPUT);
+  // Configure radar pin
+  pinMode(RADAR_PIN, INPUT);
 
   // Configure camera (pins defined in camera_pins.h)
   camera_config_t config;
@@ -83,11 +82,11 @@ void setup() {
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size   = FRAMESIZE_VGA;
-  config.jpeg_quality = 12;
-  config.fb_count     = 2;
+  config.xclk_freq_hz = 20000000;               // 20 MHz XCLK
+  config.pixel_format = PIXFORMAT_JPEG;         // JPEG for saving to SD
+  config.frame_size   = FRAMESIZE_VGA;          // adjust resolution as needed
+  config.jpeg_quality = 12;                     // 0 (best) – 63 (worst)
+  config.fb_count     = 2;                      // two frame buffers if PSRAM is present
   config.fb_location  = CAMERA_FB_IN_PSRAM;
   config.grab_mode    = CAMERA_GRAB_LATEST;
 
@@ -109,7 +108,7 @@ void loop() {
   static unsigned long lastShot = 0;
 
   // wait for motion
-  if (digitalRead(PIR_PIN) == PIR_DETECTED && (millis() - lastShot > 10000)) {
+  if (digitalRead(RADAR_PIN) == RADAR_DETECTED && (millis() - lastShot > 10000)) {
     lastShot = millis();
 
     camera_fb_t *fb = esp_camera_fb_get();
@@ -124,6 +123,7 @@ void loop() {
       Serial.println("Failed to get time, using millis");
     }
     char ts[32];
+    // format: YYYYMMDD_HHMMSS.jpg
     strftime(ts, sizeof(ts), "/%Y%m%d_%H%M%S.jpg", &timeinfo);
 
     // Save to SD card
@@ -138,8 +138,6 @@ void loop() {
     }
 
     esp_camera_fb_return(fb);
-
- 
 
     // wait 10 seconds before next possible capture
     delay(10000);
