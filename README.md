@@ -1,15 +1,18 @@
 # ESP32‑S3 Motion‑Activated Camera with Radar Sensor
 
-This project uses an ESP32‑S3 board with a built‑in OV2640 camera and micro‑SD slot together with an **HLK‑LD2410C 24 GHz radar sensor** for presence/motion detection. When the radar sensor’s OUT pin goes high, the board captures a JPEG image and saves it to the SD card. Images are named using a timestamp. Wi‑Fi is used **only** to synchronize the clock via NTP; credentials are stored in a `credentials.txt` file on the SD card. After each capture, the sketch waits **10 seconds** before listening for motion again.
+This project uses an ESP32‑S3 board with a built‑in **OV2640** camera and micro‑SD slot together with an **HLK‑LD2410C 24 GHz radar sensor** for presence/motion detection. It reads Wi‑Fi credentials from a text file on the SD card, connects to your access point to synchronize its clock via NTP, and then operates in two phases:
+
+1. **Setup stream:** Immediately after the time has been synchronized the board starts an MJPEG stream at `http://<device_ip>/` and keeps it running for **10 minutes**.  You can open that URL in a browser to view the live camera feed and adjust the camera position.  Once the 10‑minute window expires, the HTTP server is stopped.
+2. **Motion capture loop:** The board monitors the radar sensor’s digital output.  When presence is detected it captures a JPEG image, saves it to the SD card with a timestamped filename, waits **10 seconds**, and then resumes watching for motion.
 
 ## Features
 
 - Uses an ESP32‑S3 with built‑in OV2640 camera and micro‑SD slot.
 - 24 GHz radar sensor (**HLK‑LD2410C**) provides motion/presence detection.
+- Reads Wi‑Fi credentials from a `credentials.txt` file on the micro‑SD card and uses Wi‑Fi **only** to fetch the current time via NTP.
+- Provides a **10‑minute live streaming window** after power‑up so you can adjust the camera position.
 - Captures a JPEG image when radar reports presence.
 - Saves images to the micro‑SD card with filenames like `YYYYMMDD_HHMMSS.jpg`.
-- Reads Wi‑Fi credentials from a `credentials.txt` file on the micro‑SD card.
-- Connects to Wi‑Fi only to fetch the current time via NTP for timestamping.
 - Waits **10 seconds** between captures to avoid spamming the SD card.
 - Separate power rails: the board is powered from 5 V (via a buck converter if using a 12 V source).  The radar sensor is powered from the same 5 V; all grounds must be common.
 
@@ -46,21 +49,23 @@ Here is a connection diagram:
 
 ## Sketch
 
-The Arduino sketch is provided in `main.ino`. It uses the `esp_camera` driver to capture JPEG images, `SD_MMC` to write to the SD card, `WiFi` to connect to your access point and `time.h` to obtain timestamps via NTP.  In `setup()` it mounts the SD card, reads Wi‑Fi credentials from `/credentials.txt`, connects to Wi‑Fi, configures the time, sets up the radar pin as an input and initializes the camera.  In `loop()` it polls the radar pin; when it goes HIGH and at least 10 seconds have passed since the last shot, it captures an image, generates a timestamped filename, writes it to the SD card and waits 10 seconds before checking again.
+The Arduino sketch is provided in `main.ino`. It uses the `esp_camera` driver to capture JPEG images, `SD_MMC` to write to the SD card, `WiFi` to connect to your access point and `time.h` to obtain timestamps via NTP.  In `setup()` it mounts the SD card, reads Wi‑Fi credentials from `/credentials.txt`, connects to Wi‑Fi, configures the time, sets up the radar pin as an input, initializes the camera and then starts a simple MJPEG HTTP server so you can view the camera at `http://<device_ip>/`.  After 10 minutes the server is stopped and `loop()` polls the radar pin; when it goes HIGH and at least 10 seconds have passed since the last shot, it captures an image, generates a timestamped filename, writes it to the SD card and waits 10 seconds before checking again.
 
 You can adjust the following in `main.ino`:
 
 - **`RADAR_PIN`** if your radar sensor is connected to a different GPIO.
 - **`RADAR_DETECTED`** if your sensor uses the opposite logic level.
 - Camera resolution and JPEG quality via the `config.frame_size` and `config.jpeg_quality` fields.
+- The length of the live streaming window by changing the 600000 ms (10 minutes) timeout.
 
 ## Building and uploading
 
 1. Install the **ESP32** board package in the Arduino IDE.
 2. Select **ESP32S3 Dev Module** (or your specific board) under **Tools > Board**.
-3. Install the required libraries: `esp_camera`, `WiFi`, `SD_MMC` and `FS` (these come with the ESP32 core).
+3. Install the required libraries: `esp_camera`, `WiFi`, `SD_MMC`, `FS` and `ESP HTTP Server` (the latter is part of the ESP32 core).
 4. Open `main.ino`, verify the pin assignments, Wi‑Fi credentials file name and NTP server, and upload the sketch.
-5. Insert the prepared micro‑SD card and power the board.  Open the serial monitor to observe status messages.
+5. After reset the serial monitor will print the device’s IP address.  Within the first 10 minutes you can open a browser to `http://<device_ip>/` to view the live camera stream.
+6. After 10 minutes the stream stops and the board enters motion capture mode.
 
 ## Notes
 
